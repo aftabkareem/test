@@ -52,3 +52,14 @@ legend('Explicit Upwind', 'Implicit Upwind');
 xlabel('Spatial coordinate');
 ylabel('Scalar value');
 title('Comparison of Upwind Schemes');
+
+
+
+To solve the 1D scalar convection equation using first order explicit and implicit upwind finite difference schemes in MATLAB, you can follow these steps. The convection equation can be written as:
+
+Please replace c with your desired velocity value when you run the code. Also, adjust the number of spatial points Nx and time steps Nt as needed for your particular problem. The Courant number CFL is set to 0.8 to ensure stability for the explicit scheme, but it may need to be adjusted depending on your velocity value and spatial discretization.
+
+This code initializes a cosine wave and then solves the convection equation using both explicit and implicit upwind schemes. The results are plotted for comparison. Be aware that the implicit scheme requires the solution of a linear system at each time step, whereas the explicit scheme is straightforward to compute but requires a small time step to ensure stability.
+
+
+
