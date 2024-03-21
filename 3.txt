@@ -1,4 +1,3 @@
-
 close all
 
 % Number of points
@@ -28,15 +27,18 @@ hold on
 grid
 
 % Standard galerkin method
-a0 = 0; % tau = 0
+%a0 = 0; % tau = 0
 % Petrov galerkin method
-a1 = 1/(0.5*Pe); % tau alpha equals to alpha critical
+a0=0;
+a1 = 1;
 a2 = 1-(1/abs(Pe)); % alpha smaller than alpha critical
-a3 = 2/(0.5*Pe); % tau alpha equals alpha critical
-a4 = coth(abs(Pe))-1/abs(Pe); % tau equals alpha optimal
+a3=a2-0.5;
+a4=a2+3;
+a5=coth(abs(Pe))-1/abs(Pe);
+
 alpha = [a0 a1 a2 a3 a4];
-% alpha = [a1 a2 a3 a4 ]; % tau alpha = [alpha]
-for tau=1:length(alpha)
+%alpha = [a1 a2 a3 a4 ]; % tau alpha = [alpha]
+for a1=1:length(alpha)
     % Node connectivity
     lpoints = zeros(numelem,2);
     for i=1:(numelem)
@@ -50,20 +52,20 @@ for tau=1:length(alpha)
 Diffmat = zeros(numpoint,numpoint);
 % Extra diffusion matrix for petrov galerkin methods
 extraDiff = zeros(numpoint,numpoint);
-for elem = 1:numelem
+for i = 1:numelem
     % current element convection matrix
-    currentelem = Velocity*[1 -1; -1 1];
+    currentelem = Velocity/2 *[1 -1; -1 1];
     % current element diffusion matrix
     currentdiff = diffcoef/elelength * [1 -1; -1 1];
     % current element extra diffusion matrix
-    extraDiff(alpha) = alpha(tau) * diffcoef/elelength * [1 -1; -1 1];
+    currentextradiff= Velocity * alpha(a1)/2  * [1 -1; -1 1];
     
     % global nodes of element
-    points = lpoints(elem,:);
+    points = lpoints(i,:);
     % Matrix
     Convmat(points,points) = Convmat(points,points)+currentelem;
     Diffmat(points,points) = Diffmat(points,points)+currentdiff;
-    extraDiff(points,points) = extraDiff(points,points)+currentextradiff;
+   extraDiff(points,points) = extraDiff(points,points)+currentextradiff;
 end
 phi = zeros(numpoint,1);
 % Boundary Condition
@@ -71,14 +73,19 @@ phi(1)=1; % boundary condition at entry phi = 1 at inlet
 phi(end)=0; % boundary condition at exit phi = 0 at outlet
 % Matrix created:
 A = Convmat+Diffmat+extraDiff;
+A_red=A(2:numpoint-1,2:numpoint-1);
+
+
 % Code continued on the next cell
 
 % continued from previous cell
 % Red = A(2:numpoint-1,2:numpoint-1);
 rhs_red = phi(2:numpoint-1);
+rhs_red(1)=rhs_red(1)-A(2,1);
+
 % Reduced system
-newphi=A\phi;
-phi(2:numpoint-1)=newphi(2:numpoint-1);
+newphi=inv(A_red)*rhs_red;
+phi(2:numpoint-1)=newphi;
 % Plot
 plot(timearray,phi,'Marker','o','LineWidth',0.8,'MarkerSize',10);
 end
