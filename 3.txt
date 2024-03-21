@@ -1,95 +1,66 @@
-close all
+% Clear workspace and close all figures
+clear; close all;
 
-% Number of points
-numpoint = 10;
-%..........Velocity
-Pe = 7;
-% Diffusion coefficient
-diffcoef = 1;
-% Domain length
-lengthdom = 1;
-% element number
-numelem = numpoint - 1;
-% element length
-elelength = lengthdom/numelem;
-% Calculation of velocity
-Velocity = (2*Pe*diffcoef)/lengthdom;
+% Problem definition
+nPoints = 10;                    % Number of spatial points
+Pe = 7;                          % Peclet number
+diffCoeff = 1;                   % Diffusion coefficient
+domainLength = 1;                % Length of the domain
+nElements = nPoints - 1;         % Number of elements
+elemLength = domainLength / nElements; % Length of each element
+velocity = 2 * Pe * diffCoeff / domainLength; % Flow velocity
 
-timearray = 0:elelength:lengthdom;
-x=0:0.01:1;
-% Analytical solution
-phi_exact = zeros(length(x),1);
-for i=1:length(x)
-    phi_exact(i) = (exp(Velocity*x(i)/diffcoef)-exp(Velocity*lengthdom/diffcoef))/(1-exp(Velocity*lengthdom/diffcoef));
-end
-plot(x,phi_exact,'-k','LineWidth',1.2);
-hold on
-grid
+% Spatial discretization
+xVec = linspace(0, domainLength, nPoints);
+dx = xVec(2) - xVec(1);
 
-% Standard galerkin method
-%a0 = 0; % tau = 0
-% Petrov galerkin method
-a0=0;
-a1 = 1;
-a2 = 1-(1/abs(Pe)); % alpha smaller than alpha critical
-a3=a2-0.5;
-a4=a2+3;
-a5=coth(abs(Pe))-1/abs(Pe);
+% Analytical solution calculation
+xFine = 0:0.01:1;
+phiAnalytical = (exp(velocity * xFine / diffCoeff) - exp(velocity)) / (1 - exp(velocity));
+plot(xFine, phiAnalytical, 'k', 'LineWidth', 1.2);
+hold on;
+grid on;
 
-alpha = [a0 a1 a2 a3 a4];
-%alpha = [a1 a2 a3 a4 ]; % tau alpha = [alpha]
-for a1=1:length(alpha)
-    % Node connectivity
-    lpoints = zeros(numelem,2);
-    for i=1:(numelem)
-        lpoints(i,1) = i;
-        lpoints(i,2) = i+1;
+% Define the weighting factors for the Petrov-Galerkin method
+weightFactors = [0, 1, 1 - (1 / abs(Pe)), 1 - (1 / abs(Pe)) - 0.5, 1 - (1 / abs(Pe)) + 3, coth(abs(Pe)) - (1 / abs(Pe))];
+
+% Construct the global matrices
+globalStiffness = zeros(nPoints, nPoints);
+globalMass = zeros(nPoints, nPoints);
+globalExtraDiffusion = zeros(nPoints, nPoints);
+
+for i = 1:nElements
+    % Calculate elemental matrices
+    elemStiffness = (velocity / elemLength) * [1, -1; -1, 1];
+    elemDiffusion = (diffCoeff / elemLength) * [1, -1; -1, 1];
+
+    % Loop over weighting factors to build extra diffusion matrix
+    for w = 1:length(weightFactors)
+        globalExtraDiffusion(i:i+1, i:i+1) = globalExtraDiffusion(i:i+1, i:i+1) + ...
+            weightFactors(w) * (velocity / elemLength) * [1, -1; -1, 1];
     end
-    % Connection matrix
-    Convmat = zeros(numpoint,numpoint);
-
-% Diffusion matrix
-Diffmat = zeros(numpoint,numpoint);
-% Extra diffusion matrix for petrov galerkin methods
-extraDiff = zeros(numpoint,numpoint);
-for i = 1:numelem
-    % current element convection matrix
-    currentelem = Velocity/2 *[1 -1; -1 1];
-    % current element diffusion matrix
-    currentdiff = diffcoef/elelength * [1 -1; -1 1];
-    % current element extra diffusion matrix
-    currentextradiff= Velocity * alpha(a1)/2  * [1 -1; -1 1];
     
-    % global nodes of element
-    points = lpoints(i,:);
-    % Matrix
-    Convmat(points,points) = Convmat(points,points)+currentelem;
-    Diffmat(points,points) = Diffmat(points,points)+currentdiff;
-   extraDiff(points,points) = extraDiff(points,points)+currentextradiff;
+    % Assemble global matrices
+    globalStiffness(i:i+1, i:i+1) = globalStiffness(i:i+1, i:i+1) + elemStiffness;
+    globalMass(i:i+1, i:i+1) = globalMass(i:i+1, i:i+1) + elemDiffusion;
 end
-phi = zeros(numpoint,1);
-% Boundary Condition
-phi(1)=1; % boundary condition at entry phi = 1 at inlet
-phi(end)=0; % boundary condition at exit phi = 0 at outlet
-% Matrix created:
-A = Convmat+Diffmat+extraDiff;
-A_red=A(2:numpoint-1,2:numpoint-1);
 
+% Combine global matrices
+globalMatrix = globalStiffness + globalMass + globalExtraDiffusion;
 
-% Code continued on the next cell
+% Apply boundary conditions (Dirichlet at both ends)
+globalMatrix(1, :) = 0; globalMatrix(1, 1) = 1; globalMatrix(end, :) = 0; globalMatrix(end, end) = 1;
+b = zeros(nPoints, 1); b(1) = 1; % Inlet boundary condition
 
-% continued from previous cell
-% Red = A(2:numpoint-1,2:numpoint-1);
-rhs_red = phi(2:numpoint-1);
-rhs_red(1)=rhs_red(1)-A(2,1);
+% Solve the linear system of equations
+phi = globalMatrix \ b;
 
-% Reduced system
-newphi=inv(A_red)*rhs_red;
-phi(2:numpoint-1)=newphi;
-% Plot
-plot(timearray,phi,'Marker','o','LineWidth',0.8,'MarkerSize',10);
-end
-legend('Analytical Solution','PetrovGalerkin a = 1','a < alpha critical','a = alpha optimal','location','north west');
-xlabel('Domain Length (x)')
-ylabel('Scalar Quantity (\phi)')
-title(['Convection Diffusion for Peclet number(Pe) = ',num2str(Pe)],'FontSize',12,'FontWeight','normal','Color','black');
+% Visualization
+timeArray = linspace(0, domainLength, nPoints);
+plot(timeArray, phi, 'bo-', 'LineWidth', 0.8, 'MarkerSize', 10);
+legend('Analytical Solution', 'Petrov-Galerkin a = 1', 'a < alpha critical', 'a = alpha optimal', 'Location', 'northwest');
+xlabel('Domain Length (x)');
+ylabel('Scalar Quantity (\phi)');
+title(sprintf('Convection Diffusion for Peclet number(Pe) = %d', Pe), 'FontSize', 12, 'FontWeight', 'normal', 'Color', 'black');
+
+% End of script
