@@ -1,0 +1,67 @@
+% MATLAB Code for 1D Convection-Diffusion using Petrov-Galerkin Method
+clear all;
+close all;
+
+% Parameters
+numpoint = 10;   % Number of points
+Pe = 0;          % Peclet number
+u = 0;           % Velocity
+difcoef = 5;     % Diffusion coefficient
+L = 1;           % Domain length
+alpha = -1;      % Upwinding factor (negative for upwinding)
+
+% Mesh generation
+x = linspace(0, L, numpoint);
+h = x(2) - x(1);
+
+% Shape functions and their derivatives
+N = @(xi) [(1 - xi) / 2, (1 + xi) / 2];
+dNdxi = [-1/2, 1/2];
+
+% Assemble global stiffness matrix and load vector
+K_global = zeros(numpoint, numpoint);
+F_global = zeros(numpoint, 1);
+
+% Gauss point for integration
+gauss_point = 0; 
+weight = 2; 
+
+% Assembly process
+for element = 1:numpoint-1
+    local_K = zeros(2,2);
+    local_M = zeros(2,2);
+    
+    % Integration using Gauss quadrature
+    xi = gauss_point;
+    N_val = N(xi);
+    dN_dxi_val = dNdxi;
+    
+    % Jacobian of the transformation from reference element to physical element
+    J = h/2;
+    dN_dx = dN_dxi_val / J;
+    
+    % Compute element stiffness matrix
+    local_K = local_K + (u * N_val' * dN_dx + difcoef * dN_dx' * dN_dx) * weight * J;
+    
+    % Petrov-Galerkin weighting
+    dN_dx_mod = dN_dx + alpha * abs(u) / (2 * difcoef) * dN_dx;
+    local_M = local_M + (u * N_val' * dN_dx_mod) * weight * J;
+    
+    % Add local contribution to global matrix
+    K_global(element:element+1, element:element+1) = ...
+        K_global(element:element+1, element:element+1) + local_K + local_M;
+end
+
+% Apply boundary conditions
+K_global(1, :) = 0; K_global(1, 1) = 1; F_global(1) = 1; % Dirichlet BC at x=0
+K_global(end, :) = 0; K_global(end, end) = 1; F_global(end) = 0; % Dirichlet BC at x=L
+
+% Solve the linear system
+phi = K_global \ F_global;
+
+% Post-processing: plot the results
+plot(x, phi, 'o-', 'LineWidth', 2);
+title('Convection-Diffusion Equation for Peclet number(Pe)=',num2str(Pe));
+xlabel('Domain (x)');
+ylabel('Scalar Variable (\phi)');
+grid on;
