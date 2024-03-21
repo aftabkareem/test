@@ -1,88 +1,69 @@
-close all
+% Clear all figures and variables
+clear variables; 
+close all;
 
-% Number of points
-numpoint = 10;
-%..........Velocity
-Pe = 7000;
-% Diffusion coefficient
-diffcoef = 1;
-% Domain length
-lengthdom = 1;
-% element number
-numelem = numpoint - 1;
-% element length
-elelength = lengthdom/numelem;
-% Calculation of velocity
-Velocity = (2*Pe*diffcoef)/lengthdom;
+% Define simulation parameters
+totalPoints = 10;
+PecletNumber = 7000;
+diffusivity = 1;
+domainLength = 1;
 
-timearray = 0:elelength:lengthdom;
-x=0:0.01:1;
+% Compute mesh properties
+numberOfElements = totalPoints - 1;
+elementLength = domainLength / numberOfElements;
+flowVelocity = (2 * PecletNumber * diffusivity) / domainLength;
 
-% Standard galerkin method
-%a0 = 0; % tau = 0
-% Petrov galerkin method
-a0=0;
-a1 = 1;
-a2 = 1-(1/abs(Pe)); % alpha smaller than alpha critical
-a3=a2-0.5;
-a4=a2+3;
-a5=coth(abs(Pe))-1/abs(Pe);
+% Generate spatial domain
+spatialDomain = linspace(0, domainLength, totalPoints);
 
-alpha = [a0 a1 a2 a3 a4];
-%alpha = [a1 a2 a3 a4 ]; % tau alpha = [alpha]
-for a1=1:length(alpha)
-    % Node connectivity
-    lpoints = zeros(numelem,2);
-    for i=1:(numelem)
-        lpoints(i,1) = i;
-        lpoints(i,2) = i+1;
-    end
-    % Connection matrix
-    Convmat = zeros(numpoint,numpoint);
+% Petrov-Galerkin stabilization parameters
+stabilizationParams = [0, 1, 1-(1/abs(PecletNumber)), ...
+                       (1-(1/abs(PecletNumber)))-0.5, ...
+                       (1-(1/abs(PecletNumber)))+3, ...
+                       coth(abs(PecletNumber))-1/abs(PecletNumber)];
 
-% Diffusion matrix
-Diffmat = zeros(numpoint,numpoint);
-% Extra diffusion matrix for petrov galerkin methods
-extraDiff = zeros(numpoint,numpoint);
-for i = 1:numelem
-    % current element convection matrix
-    currentelem = Velocity/2 *[1 -1; -1 1];
-    % current element diffusion matrix
-    currentdiff = diffcoef/elelength * [1 -1; -1 1];
-    % current element extra diffusion matrix
-    currentextradiff= Velocity * alpha(a1)/2  * [1 -1; -1 1];
+% Initialize global matrices
+globalConvection = zeros(totalPoints);
+globalDiffusion = zeros(totalPoints);
+globalStabilization = zeros(totalPoints);
+
+% Assemble matrices
+for elemIndex = 1:numberOfElements
+    % Define local matrices for convection and diffusion
+    localConvection = (flowVelocity / 2) * [1, -1; -1, 1];
+    localDiffusion = (diffusivity / elementLength) * [1, -1; -1, 1];
     
-    % global nodes of element
-    points = lpoints(i,:);
-    % Matrix
-    Convmat(points,points) = Convmat(points,points)+currentelem;
-    Diffmat(points,points) = Diffmat(points,points)+currentdiff;
-   extraDiff(points,points) = extraDiff(points,points)+currentextradiff;
-end
-phi = zeros(numpoint,1);
-% Boundary Condition
-phi(1)=1; % boundary condition at entry phi = 1 at inlet
-phi(end)=0; % boundary condition at exit phi = 0 at outlet
-% Matrix created:
-A = Convmat+Diffmat+extraDiff;
-A_red=A(2:numpoint-1,2:numpoint-1);
-
-
-% Code continued on the next cell
-
-% continued from previous cell
-% Red = A(2:numpoint-1,2:numpoint-1);
-rhs_red = phi(2:numpoint-1);
-rhs_red(1)=rhs_red(1)-A(2,1);
-
-% Reduced system
-newphi=inv(A_red)*rhs_red;
-phi(2:numpoint-1)=newphi;
-% Plot
-plot(timearray,phi);
+    % Loop through each stabilization parameter
+    for stabParam = stabilizationParams
+        % Calculate local stabilization matrix
+        localStabilization = (stabParam * flowVelocity / 2) * [1, -1; -1, 1];
+        
+        % Assign to global stabilization matrix
+        globalStabilization(elemIndex:elemIndex+1, elemIndex:elemIndex+1) = ...
+            globalStabilization(elemIndex:elemIndex+1, elemIndex:elemIndex+1) + localStabilization;
+    end
+    
+    % Assemble global convection and diffusion matrices
+    nodes = [elemIndex, elemIndex + 1];
+    globalConvection(nodes, nodes) = globalConvection(nodes, nodes) + localConvection;
+    globalDiffusion(nodes, nodes) = globalDiffusion(nodes, nodes) + localDiffusion;
 end
 
-xlabel('Domain Length (x)')
-ylabel('Scalar Quantity (\phi)')
-title(['Convection Diffusion for Peclet number(Pe) = ',num2str(Pe)]);
-grid
+% Combine global matrices
+globalMatrix = globalConvection + globalDiffusion + globalStabilization;
+
+% Apply boundary conditions (Dirichlet)
+globalMatrix(1, :) = 0; globalMatrix(1, 1) = 1;
+globalMatrix(end, :) = 0; globalMatrix(end, end) = 1;
+sourceTerm = zeros(totalPoints, 1);
+sourceTerm(1) = 1; % Inlet boundary condition
+
+% Solve the system of linear equations
+phiSolution = globalMatrix \ sourceTerm;
+
+% Plotting the numerical solution
+plot(spatialDomain, phiSolution, 'o-', 'LineWidth', 2);
+title(['Convection-Diffusion for Peclet Number Pe = ' num2str(PecletNumber)]);
+xlabel('Domain Length (x)');
+ylabel('Scalar Quantity (\phi)');
+grid on;
